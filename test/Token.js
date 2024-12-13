@@ -1,5 +1,6 @@
 // const { expect } = require('chai');
-var should = require('chai').should();
+// var expect = require('chai').expect;
+require('chai').should();
 const { ethers } = require('hardhat');
 
 const tokens = (n) => {
@@ -7,13 +8,14 @@ const tokens = (n) => {
 };
 
 describe('Token', () => {
-  let token, accounts, deployer;
+  let token, accounts, deployer, receiver;
 
   beforeEach(async () => {
     const Token = await ethers.getContractFactory('Token');
     token = await Token.deploy('Moon Lambo', 'MNB', '1000000');
     accounts = await ethers.getSigners();
     deployer = accounts[0];
+    receiver = accounts[1];
   });
 
   describe('Deployment', () => {
@@ -40,6 +42,45 @@ describe('Token', () => {
 
     it('assigns total supply to the deployer', async () => {
       (await token.balanceOf(deployer.address)).should.equal(totalSupply);
+    });
+  });
+
+  describe('Sending Tokens', () => {
+    let amount, transaction, result;
+
+    beforeEach(async () => {
+      amount = tokens(100);
+      transaction = await token.connect(deployer).transfer(receiver.address, amount);
+      result = await transaction.wait();
+    });
+
+    describe('Positive Cases', () => {
+      it('transfers token balances', async () => {
+        (await token.balanceOf(deployer.address)).should.equal(tokens(999900));
+        (await token.balanceOf(receiver.address)).should.equal(amount);
+      });
+
+      it('emits a Transfer event', async () => {
+        const event = result.events[0];
+        event.event.should.equal('Transfer');
+
+        const args = event.args;
+        args.from.should.equal(deployer.address);
+        args.to.should.equal(receiver.address);
+        args.value.should.equal(amount);
+      });
+    });
+
+    describe('Negative Cases', () => {
+      it('rejects insufficient balances', async () => {
+        const invalidAmount = tokens(100000000);
+        await token.connect(deployer).transfer(receiver.address, invalidAmount).should.be.reverted;
+      });
+
+      it('rejects invalid recipient', async () => {
+        const amount = tokens(100);
+        await token.connect(deployer).transfer('0x0000000000000000000000000000000000000000', amount).should.be.reverted;
+      });
     });
   });
 });
