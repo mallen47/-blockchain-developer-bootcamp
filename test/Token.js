@@ -8,7 +8,7 @@ const tokens = (n) => {
 };
 
 describe('Token', () => {
-  let token, accounts, deployer, receiver;
+  let token, accounts, deployer, receiver, exchange;
 
   beforeEach(async () => {
     const Token = await ethers.getContractFactory('Token');
@@ -16,6 +16,7 @@ describe('Token', () => {
     accounts = await ethers.getSigners();
     deployer = accounts[0];
     receiver = accounts[1];
+    exchange = accounts[2];
   });
 
   describe('Deployment', () => {
@@ -80,6 +81,39 @@ describe('Token', () => {
       it('rejects invalid recipient', async () => {
         const amount = tokens(100);
         await token.connect(deployer).transfer('0x0000000000000000000000000000000000000000', amount).should.be.reverted;
+      });
+    });
+  });
+
+  describe('Approving Tokens', () => {
+    let amount, transaction, result;
+
+    beforeEach(async () => {
+      amount = tokens(100);
+      transaction = await token.connect(deployer).approve(exchange.address, amount);
+      result = await transaction.wait();
+    });
+
+    describe('Positive Cases', () => {
+      it('allocates an allowance for delegated token spending', async () => {
+        let allowance = await token.allowance(deployer.address, exchange.address);
+        allowance.toString().should.equal(amount.toString());
+      });
+
+      it('emits an Approval event', async () => {
+        const event = result.events[0];
+        event.event.should.equal('Approval');
+
+        const args = event.args;
+        args.owner.should.equal(deployer.address);
+        args.spender.should.equal(exchange.address);
+        args.value.should.equal(amount);
+      });
+    });
+
+    describe('Negative Cases', () => {
+      it('rejects invalid spenders', async () => {
+        await token.connect(deployer).approve('0x0000000000000000000000000000000000000000', amount).should.be.reverted;
       });
     });
   });
